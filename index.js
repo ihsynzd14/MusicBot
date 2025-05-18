@@ -5,6 +5,30 @@ const express = require('express');
 const app = express();
 const port = 3000;
 
+const https = require('https');
+
+const url = 'https://musicbot-i0i6.onrender.com/';
+const interval = 40000; // 40 seconds
+
+function pingServer() {
+  console.log(`[${new Date().toISOString()}] Sending ping to ${url}...`);
+
+  https.get(url, (res) => {
+    console.log(`[${new Date().toISOString()}] Response received: Status ${res.statusCode}`);
+    
+    res.on('data', () => {}); // Consume data to finish request
+    res.on('end', () => {
+      console.log(`[${new Date().toISOString()}] Response ended.`);
+    });
+  }).on('error', (e) => {
+    console.error(`[${new Date().toISOString()}] Request error: ${e.message}`);
+  });
+}
+
+// Start pinger
+pingServer();
+setInterval(pingServer, interval);
+
 app.get('/', (req, res) => {
   res.send('Discord Music Bot is running!');
 });
