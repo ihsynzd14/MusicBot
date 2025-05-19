@@ -75,6 +75,13 @@ const commands = [
         .setDescription('Song name or URL')
         .setRequired(true)),
   new SlashCommandBuilder()
+    .setName('playlist')
+    .setDescription('Plays a playlist')
+    .addStringOption(option => 
+      option.setName('url')
+        .setDescription('YouTube or Spotify playlist URL')
+        .setRequired(true)),
+  new SlashCommandBuilder()
     .setName('pause')
     .setDescription('Pause the current song'),
   new SlashCommandBuilder()
@@ -367,6 +374,22 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.reply({ embeds: [embed] });
         if (!player.playing && !player.paused) player.play();
         break;
+      case 'PLAYLIST_LOADED':
+        const playlist = res.playlist;
+        player.queue.add(res.tracks);
+        
+        const playlistEmbed = new EmbedBuilder()
+          .setDescription(`Added playlist [${playlist.name}](${query}) with ${res.tracks.length} tracks to the queue`)
+          .setColor('#FF0000')
+          .setFooter({ 
+            text: `Requested by ${interaction.user.tag}`,
+            iconURL: interaction.user.displayAvatarURL()
+          })
+          .setTimestamp();
+        
+        await interaction.reply({ embeds: [playlistEmbed] });
+        if (!player.playing && !player.paused) player.play();
+        break;
       case 'NO_MATCHES':
         await interaction.reply({ content: 'No results found! Please try a different search term.', ephemeral: true });
         break;
@@ -601,6 +624,7 @@ client.on('interactionCreate', async (interaction) => {
       .addFields(
         { name: '🎵 Music Controls', value: 
           '`/play` - Play a song from name/URL\n' +
+          '`/playlist` - Play a YouTube/Spotify playlist\n' +
           '`/pause` - ⏸️ Pause current playback\n' +
           '`/resume` - ▶️ Resume playback\n' +
           '`/stop` - ⏹️ Stop and disconnect\n' +
@@ -660,8 +684,6 @@ client.on('interactionCreate', async (interaction) => {
     await interaction.reply({ embeds: [embed] });
   }
 
-
-
   if (commandName === 'stats') {
     const uptime = Math.round(client.uptime / 1000);
     const seconds = uptime % 60;
@@ -698,6 +720,51 @@ client.on('interactionCreate', async (interaction) => {
       })
       .setTimestamp();
     await interaction.reply({ embeds: [embed] });
+  }
+
+  if (commandName === 'playlist') {
+    if (!interaction.member.voice.channel) {
+      return interaction.reply({ content: 'Join a voice channel first!', ephemeral: true });
+    }
+
+    const player = manager.create({
+      guild: interaction.guild.id,
+      voiceChannel: interaction.member.voice.channel.id,
+      textChannel: interaction.channel.id,
+      selfDeafen: true
+    });
+
+    if (!player.twentyFourSeven) player.twentyFourSeven = false;
+
+    player.connect();
+
+    const url = options.getString('url');
+    if (!url.includes('youtube.com/playlist') && !url.includes('spotify.com/playlist')) {
+      return interaction.reply({ content: 'Please provide a valid YouTube or Spotify playlist URL.', ephemeral: true });
+    }
+
+    await interaction.deferReply();
+    
+    const res = await manager.search(url, interaction.user);
+
+    if (res.loadType === 'PLAYLIST_LOADED') {
+      player.queue.add(res.tracks);
+      
+      const playlistEmbed = new EmbedBuilder()
+        .setTitle('🎵 Playlist Added')
+        .setDescription(`Added playlist [${res.playlist.name}](${url}) with ${res.tracks.length} tracks to the queue`)
+        .setColor('#FF0000')
+        .setFooter({ 
+          text: `Requested by ${interaction.user.tag}`,
+          iconURL: interaction.user.displayAvatarURL()
+        })
+        .setTimestamp();
+      
+      await interaction.followUp({ embeds: [playlistEmbed] });
+      if (!player.playing && !player.paused) player.play();
+    } else {
+      await interaction.followUp({ content: 'Failed to load playlist! Please make sure the URL is correct.', ephemeral: true });
+    }
   }
 });
 
